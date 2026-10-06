@@ -42,13 +42,22 @@ http://localhost:3100 에서 플레이합니다. 배포용 빌드는 `npm run bu
 
 현재 게임 콘텐츠는 `src/lib/scenarios.ts`의 번들 데이터를 사용하며 SQL seed와 동일한 원본입니다. DB에서 편집한 시나리오를 런타임에 내려받는 CMS 기능은 포함하지 않습니다. seed 재생성은 `npx tsx scripts/seed.ts`. 실제 연결 정보가 제공되지 않아 원격 DB 및 RLS 실행 검증은 수행하지 않았습니다.
 
-## Higgsfield 컷인 연결
+## Higgsfield 장면 연결 및 게임성 통합
 
-`NEXT_PUBLIC_OBJECTION_VIDEO_URL`에 Higgsfield에서 생성한 공개 HTTPS MP4/WebM URL을 설정하면 정답 증거 제시 시 비디오 모달이 재생됩니다. 재생 실패나 URL 미설정 시 도트 컷인으로 전환되며 결과 화면으로 진행할 수 있습니다.
+GitHub `01389b3`의 다섯 사건 조문 퍼즐과 법률 데이터를 유지하면서 탐색·심문 연출을 확장했습니다.
 
-실제 Higgsfield 유료 생성/API 호출은 수행하지 않았습니다. 영상은 포함되어 있지 않으며 API 비밀키를 브라우저에 넣지 않습니다. 현재는 영상 URL을 주입하는 연동 지점과 재생·실패 처리가 구현되어 있습니다.
+- 바닥 클릭 시 장애물을 피해 걷고, 가까운 오브젝트 이름이 E 버튼에 표시됩니다. 방향키·WASD·터치 패드와 직접 핫스팟 조사도 지원합니다. 걷기는 턴을 소모하지 않습니다.
+- 현재 목표와 조사 진행도, 새 증거 알림, 조사·합성 효과음, 심문 배경음, 모순 확인 진행 표시를 추가했습니다.
+- 사건별로 **프롤로그 → 이의 있음 → 상대 반응 → 에필로그** 영상을 연결합니다. 정답 반박은 이의 있음과 상대 반응을 연속 재생합니다. 영상이 없거나 재생에 실패하면 도트 연출로 진행합니다.
+- 기존 게임 저장의 누락된 조문 진행 필드를 보완하며, 연출 설정은 게임 저장과 별도로 보관합니다.
 
-권장 생성 프롬프트: “Original retro 16-bit pixel art, Korean teenage student in a pale yellow jacket pointing forward in a fictional hearing room, dramatic speed lines, determined expression, no text, no recognizable copyrighted character, 4 seconds, 16:9.”
+상단 필름 아이콘의 **연출 보관함**에서 사건과 장면을 선택하고 Higgsfield에서 완성된 공개 HTTPS MP4/WebM 주소를 적용하세요. 각 장면의 생성 프롬프트를 복사하고 미리 볼 수 있습니다. 브라우저에서 적용한 주소는 해당 기기에만 저장됩니다.
+
+모든 플레이어에게 적용하려면 **연출 설정 내보내기**로 받은 파일을 `public/cinematics/manifest.json`에 반영하세요. 직접 소유한 영상 파일은 `public/cinematics/`에 두고 `/cinematics/파일명.mp4`로 연결할 수 있습니다. 설정 우선순위는 기기의 개별 사건 → 배포된 개별 사건 → 기기의 공통 영상 → 배포된 공통 영상입니다. 기존 `NEXT_PUBLIC_OBJECTION_VIDEO_URL`은 이의 있음 장면의 마지막 대체 설정으로 계속 지원합니다.
+
+현재 manifest에는 실제 영상이 없습니다. 이번 작업에서 Higgsfield 생성 요청은 계정 플랜 제한으로 거절되었으며 완료된 영상이나 생성 작업 ID는 없습니다. 런타임은 완료된 영상만 재생하며 생성 API를 호출하거나 요금을 발생시키지 않습니다. API 비밀키를 클라이언트에 넣지 않습니다. 실제 영상 재생 성공 검증은 유효한 에셋 연결 후 필요하며, 영상 미설정·404 대체 연출과 전체 사건 진행은 검증했습니다.
+
+검증: 규칙·이동·영상 설정·이전 저장 호환 테스트 30개, TypeScript 검사, 프로덕션 빌드 통과. 브라우저에서 형사 사건 증거 수집·합성부터 5단계 조문 퍼즐, 세 차례 반박과 에필로그까지 S등급 완료를 확인했습니다.
 
 ## 플레이 가이드
 

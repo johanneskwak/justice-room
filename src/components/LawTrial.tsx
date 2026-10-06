@@ -32,7 +32,7 @@ function Cross({lc,onFeedback,onObjection}:{lc:LawCase;onFeedback:(f:Feedback)=>
   const title=(id:string)=>sc.clues.find(c=>c.id===id)?.title??id;
   return <div className="law-card"><span className="law-tag">STEP 4 · 심문 · 증거 + 조문으로 반박</span>
     <div className="law-progress">{lc.cross.map((_,i)=><span key={i} className={s.cleared.includes(i)?'done':i===s.statement?'now':''}>{s.cleared.includes(i)?<Check size={12} weight="bold"/>:i+1}</span>)}</div>
-    <blockquote>“{sc.statements[s.statement]}”</blockquote>
+    <blockquote key={s.statement} className="testimony-enter">“{sc.statements[s.statement]}”</blockquote>
     <div className="law-actions"><button className="secondary" disabled={s.pressed} onClick={s.press}>잠깐! 추궁하기 <small>−1 TURN</small></button><button className="secondary" onClick={s.nextStatement}>다음 진술 <ArrowRight/></button></div>
     {s.pressed?<>
       <p className="law-press">{sc.press[s.statement]}</p><p className="law-hint"><BookOpen size={15}/> 힌트: {c.hint}</p>
@@ -44,10 +44,11 @@ function Cross({lc,onFeedback,onObjection}:{lc:LawCase;onFeedback:(f:Feedback)=>
 
 export default function LawTrial({onObjection}:{onObjection:()=>void}){
   const s=useGame(),sc=scenarios[s.scenario],lc=lawCaseOf(sc.code),[fb,setFb]=useState<Feedback|null>(null),stepNames=lc.stepNames;
-  const go=(f:Feedback)=>setFb(f);
+  const go=(f:Feedback)=>{setFb(f);};
+  const pressure=Math.round(s.cleared.length/lc.cross.length*100);
   return <section className="law-panel"><div className="panel-top"><div><span className="live-dot"/><strong>{sc.venue}</strong><span className="location-tag">LAW PUZZLE</span></div><span className="scene-time">조문 {s.cards.length}장 보유</span></div>
     <ol className="law-steps" aria-label="진행 단계">{stepNames.map((n,i)=><li key={n} className={i<s.lawStep?'done':i===s.lawStep?'now':''}><span>{i<s.lawStep?<Check size={12} weight="bold"/>:i+1}</span>{n}</li>)}</ol>
-    <div className="law-banner"><World room={-1} scenario={s.scenario} mode="trial" onInteract={()=>{}}/><span className="law-banner-badge"><Scales size={16}/> {stepNames[s.lawStep]}</span></div>
-    <div className="law-body">{s.lawStep===0||s.lawStep===1||s.lawStep===4?<Quiz key={s.lawStep} lc={lc} step={s.lawStep} onFeedback={go}/>:s.lawStep===2?<Elements lc={lc} onFeedback={go}/>:<Cross lc={lc} onFeedback={go} onObjection={onObjection}/>}
+    <div className={`law-banner ${fb&&!fb.ok?'trial-mistake':''}`}><World room={-1} scenario={s.scenario} mode="trial" reaction={s.cleared.length>0?'shaken':'calm'} onInteract={()=>{}}/><span className="law-banner-badge"><Scales size={16}/> {stepNames[s.lawStep]}</span></div>
+    <div className="battle-hud"><div><span>HARU · 나의 입증</span><strong>{s.cleared.length} / {lc.cross.length}<small> 모순 확인</small></strong></div><div className="pressure-meter"><i style={{width:`${pressure}%`}}/></div><div><span>상대방의 진술</span><strong>{pressure===100?'모순 확인 완료':pressure>0?'진술이 흔들리고 있다':'아직 반박되지 않았다'}</strong></div></div><div className="law-body">{s.lawStep===0||s.lawStep===1||s.lawStep===4?<Quiz key={s.lawStep} lc={lc} step={s.lawStep} onFeedback={go}/>:s.lawStep===2?<Elements lc={lc} onFeedback={go}/>:<Cross lc={lc} onFeedback={go} onObjection={onObjection}/>}
       <Result fb={fb}/></div></section>;
 }

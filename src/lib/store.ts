@@ -33,7 +33,7 @@ const lc=lawOf(s);if(!lc.required.every(i=>s.inventory.includes(i))||!s.cards.in
 set({phase:'trial',pressed:false,statement:0,lawStep:0,cards:union(s.cards,lc.counterCards),log:[lc.startLog,...s.log].slice(0,20)});},
 press:()=>{const s=get();if(s.phase!=='trial'||s.turns<1||s.pressed)return;if(s.lawStep!==3||s.cleared.includes(s.statement))return;set({...spend(s,scenarios[s.scenario].press[s.statement]),pressed:true});},
 nextStatement:()=>{const s=get();if(s.phase!=='trial')return;const n=lawOf(s).cross.length;let next=(s.statement+1)%n;for(let i=0;i<n&&s.cleared.includes(next);i++)next=(next+1)%n;set({statement:next,pressed:false});},
-restore:s=>set({...initial(s.scenario),...s}),
+restore:s=>{if(isSave(s))set(normalizeSave(s));},
 answerQuiz:optionId=>{const s=get(),lc=lawOf(s),quiz=lc?.quizzes.find(q=>q.step===s.lawStep);if(!canAct(s)||!quiz)return {ok:false,message:'지금은 답할 수 없습니다.'};
 const o=quiz.options.find(o=>o.id===optionId);if(!o)return {ok:false,message:'선택지를 찾을 수 없습니다.'};
 if(!o.correct)return fail(s,`${o.label} — ${o.explain}`);
@@ -52,7 +52,7 @@ if(statuteId!==c.statute)return fail(s,c.wrongStatute[statuteId]??c.generic,{cre
 const cleared=[...s.cleared,s.statement],all=cleared.length===lc.cross.length,next=lc.cross.map((_,i)=>i).find(i=>!cleared.includes(i))??0;
 set({cleared,pressed:false,statement:next,lawStep:all?4:3,cards:all?union(s.cards,lc.epilogueCards):s.cards,credibility:Math.min(100,s.credibility+15),log:['모순을 입증했습니다.',...s.log].slice(0,20)});
 return {ok:true,message:c.success};}};
-},{name:'justice-room-save-v1',version:1,partialize:s=>snapshot(s),merge:(persisted,current)=>isSave(persisted)?{...current,...persisted}:current}));
+},{name:'justice-room-save-v1',version:1,partialize:s=>snapshot(s),merge:(persisted,current)=>isSave(persisted)?{...current,...normalizeSave(persisted)}:current}));
 export function snapshot(s:Save):Save {return {scenario:s.scenario,phase:s.phase,room:s.room,turns:s.turns,money:s.money,inventory:s.inventory,solved:s.solved,admissibility:s.admissibility,credibility:s.credibility,pressed:s.pressed,statement:s.statement,log:s.log,consulted:s.consulted,cards:s.cards,slots:s.slots,cleared:s.cleared,lawStep:s.lawStep,mistakes:s.mistakes};}
 const objectIds=['calendar','terminal','phone','bank','box','codex','tip','family','allowance','chat','terms','roster','text','record','scene','bill','stats','impact','aid'],clueIds=['a','b','c','d','e','f','g','u'];
 export function isSave(s:unknown):s is Save{if(!s||typeof s!=='object')return false;const x=s as Save;
@@ -62,3 +62,10 @@ const cardsOk=x.cards===undefined||Array.isArray(x.cards)&&x.cards.every(i=>card
 const stepOk=x.lawStep===undefined||Number.isInteger(x.lawStep)&&x.lawStep>=0&&x.lawStep<=4;
 const mistakesOk=x.mistakes===undefined||Number.isInteger(x.mistakes)&&x.mistakes>=0&&x.mistakes<=999;
 return Number.isInteger(x.scenario)&&x.scenario>=0&&x.scenario<5&&['prologue','investigation','trial','won','lost'].includes(x.phase)&&Number.isInteger(x.room)&&x.room>=-1&&x.room<2&&Number.isInteger(x.turns)&&x.turns>=0&&x.turns<=24&&Number.isFinite(x.money)&&x.money>=0&&x.money<=300000&&['admissibility','credibility'].every(k=>Number.isFinite(x[k as keyof Save])&&Number(x[k as keyof Save])>=0&&Number(x[k as keyof Save])<=100)&&Array.isArray(x.inventory)&&x.inventory.every(i=>clueIds.includes(i))&&Array.isArray(x.solved)&&x.solved.every(i=>objectIds.includes(i))&&Array.isArray(x.log)&&x.log.length<=20&&x.log.every(i=>typeof i==='string')&&typeof x.consulted==='boolean'&&typeof x.pressed==='boolean'&&[0,1,2].includes(x.statement)&&slotsOk&&clearedOk&&cardsOk&&stepOk&&mistakesOk;}
+
+export function normalizeSave(saved:Save):Save {
+ const normalized={...initial(saved.scenario),...saved};
+ // Legacy saves may have entered a trial before the law-card system existed.
+ if(saved.cards===undefined&&normalized.phase==='trial'){normalized.phase='investigation';normalized.lawStep=0;normalized.pressed=false;}
+ return normalized;
+}
