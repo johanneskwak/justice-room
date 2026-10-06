@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "clips": {
+    "shared": {},
+    "SCENARIO_CRIMINAL": {},
+    "SCENARIO_LABOR": {},
+    "SCENARIO_CIVIL_TORT": {},
+    "SCENARIO_CIVIL_CONTRACT": {},
+    "SCENARIO_CONSTITUTIONAL": {}
+  }
+}

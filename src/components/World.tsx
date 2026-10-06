@@ -1,17 +1,20 @@
 'use client';
-import {useEffect,useRef} from 'react';
-import {scenarios} from '@/lib/scenarios';
-export type WorldProps={room:number;scenario:number;scene?:number;mode:'town'|'room'|'prologue'|'trial';onInteract:()=>void;direction?:string};
+import {useEffect,useRef,useImperativeHandle,type Ref} from 'react';
+import {findPath,walkable,distance,entrances,type Point} from '@/lib/navigation';
+import {scenarios,objectRoom} from '@/lib/scenarios';
+export type WorldHandle={interact:()=>void};
+export type WorldProps={room:number;scenario:number;scene?:number;mode:'town'|'room'|'prologue'|'trial';onInteract:(position?:Point)=>void;direction?:string;ref?:Ref<WorldHandle>;onNearby?:(name:string)=>void;reaction?:'calm'|'shaken'};
 const palette={ink:'#172a35',grass:'#72816a',road:'#4c5a62',pave:'#a7ac91',cream:'#d9d3b7'};
-export default function World({room,scenario,scene=0,mode,onInteract,direction}:WorldProps){const canvas=useRef<HTMLCanvasElement>(null),actor=useRef({x:390,y:270}),interact=useRef(onInteract),directionRef=useRef(direction);interact.current=onInteract;directionRef.current=direction;
-useEffect(()=>{const c=canvas.current;if(!c)return;const g=c.getContext('2d')!;let raf=0,t=0;const keys=new Set<string>();actor.current={x:390,y:mode==='room'?310:270};
-const down=(e:KeyboardEvent)=>{if((e.target as HTMLElement).matches('input,select,textarea')||document.querySelector('[role="dialog"]'))return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','e','E','w','a','s','d'].includes(e.key)){e.preventDefault();keys.add(e.key);if(e.key.toLowerCase()==='e'&&!e.repeat)interact.current();}};const up=(e:KeyboardEvent)=>keys.delete(e.key);const clear=()=>keys.clear();window.addEventListener('keydown',down);window.addEventListener('keyup',up);window.addEventListener('blur',clear);
+export default function World({room,scenario,scene=0,mode,onInteract,direction,ref,onNearby,reaction='calm'}:WorldProps){const canvas=useRef<HTMLCanvasElement>(null),actor=useRef({x:390,y:270}),interact=useRef(onInteract),directionRef=useRef(direction),path=useRef<Point[]>([]),nearby=useRef(onNearby);nearby.current=onNearby;interact.current=onInteract;directionRef.current=direction;
+useImperativeHandle(ref,()=>({interact:()=>interact.current({...actor.current})}),[]);
+useEffect(()=>{const c=canvas.current;if(!c)return;const g=c.getContext('2d')!;let raf=0,t=0,lastTime=0,lastNearby='';path.current=[];const keys=new Set<string>();actor.current={x:390,y:mode==='room'?310:270};
+const down=(e:KeyboardEvent)=>{if((e.target as HTMLElement).matches('input,select,textarea')||document.querySelector('[role="dialog"]')||mode==='trial'||mode==='prologue')return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','e','E','w','a','s','d'].includes(e.key)){e.preventDefault();keys.add(e.key);if(e.key.toLowerCase()==='e'&&!e.repeat)interact.current({...actor.current});}};const up=(e:KeyboardEvent)=>keys.delete(e.key);const clear=()=>keys.clear();window.addEventListener('keydown',down);window.addEventListener('keyup',up);window.addEventListener('blur',clear);
 const rect=(x:number,y:number,w:number,h:number,color:string)=>{g.fillStyle=color;g.fillRect(Math.round(x),Math.round(y),w,h);};
 const text=(s:string,x:number,y:number,color='#f3edd1',size=11)=>{g.fillStyle=color;g.font=`bold ${size}px monospace`;g.textAlign='center';g.fillText(s,x,y);};
 const tree=(x:number,y:number)=>{rect(x-15,y+8,40,12,'#344d4555');rect(x,y,8,24,'#635e4d');rect(x-15,y-27,37,31,'#435f51');rect(x-21,y-17,48,20,'#496a57');rect(x-10,y-35,25,22,'#57765c');rect(x-10,y-29,9,5,'#79916a');};
 const person=(x:number,y:number,coat='#e7d998',scale=2,flip=false)=>{g.save();g.translate(x,y);g.scale(flip?-scale:scale,scale);const r=(a:number,b:number,w:number,h:number,col:string)=>rect(a,b,w,h,col);r(-6,15,15,3,'#172a3540');r(-5,-9,10,9,'#26313b');r(-6,-6,12,6,'#34404b');r(-4,-3,8,8,'#e4b994');r(2,-1,2,2,'#202833');r(-5,5,10,9,coat);r(-7,6,2,7,'#e4b994');r(5,6,2,7,'#e4b994');const walk=Math.sin(t*.12)>0?1:0;r(-4,14,3,5+walk,'#314354');r(2,14,3,6-walk,'#314354');r(-5,19,4,2,'#172a35');r(2,19,4,2,'#172a35');g.restore();};
 const building=(x:number,y:number,w:number,h:number,color:string,label:string,sign:string)=>{rect(x+8,y+12,w,h,'#33464b55');rect(x,y,w,h,color);rect(x-5,y-7,w+10,13,'#304652');rect(x,y+6,w,5,'#ffffff20');rect(x+8,y+16,w-16,23,sign);text(label,x+w/2,y+32,'#f8efd5',12);for(let i=0;i<Math.floor(w/38);i++){rect(x+12+i*38,y+49,25,27,'#294952');rect(x+14+i*38,y+51,20,22,'#8eada7');rect(x+23+i*38,y+51,2,23,'#d4dbc1');rect(x+14+i*38,y+60,20,2,'#d4dbc1');}rect(x+w/2-11,y+h-34,22,34,'#344f54');rect(x+w/2-8,y+h-31,16,22,'#89a3a0');rect(x+w/2+6,y+h-15,2,3,'#e8d487');rect(x-3,y+h,w+6,6,'#bec4a7');};
-const draw=()=>{t++;g.imageSmoothingEnabled=false;rect(0,0,800,440,palette.grass);
+const draw=(time=0)=>{const delta=Math.min((time-lastTime)/16.667||1,2);lastTime=time;t+=delta;g.imageSmoothingEnabled=false;rect(0,0,800,440,palette.grass);
 if(mode==='town'){
 for(let y=0;y<440;y+=18)for(let x=0;x<800;x+=23){rect(x+(y%3)*3,y,2,3,'#819174');}
 rect(0,208,800,120,palette.pave);rect(335,0,134,440,palette.pave);rect(0,224,800,86,palette.road);rect(352,0,99,440,palette.road);
@@ -27,11 +30,27 @@ rect(0,0,800,142,'#687a7e');rect(0,142,800,298,'#a2997d');for(let y=146;y<440;y+
 rect(290,184,195,70,'#5c6c66');rect(290,175,195,15,'#ddcdac');rect(373,122,55,45,'#344e59');rect(378,127,45,32,'#7ca698');text('ENTER',400,147,'#e4e9b1',8);rect(394,167,12,9,'#304650');rect(332,184,3,69,'#819284');rect(432,184,3,69,'#819284');
 rect(567,39,155,99,'#516965');for(let a=0;a<3;a++){rect(571,69+a*30,147,4,'#d3c5a1');for(let b=0;b<12;b++)rect(574+b*12,47+a*30,8,22,['#af7967','#c6b482','#8ca8a4'][b%3]);}rect(535,255,85,46,'#6c6555');rect(531,248,93,10,'#d5c2a0');rect(558,223,24,25,'#344f5b');rect(561,226,18,18,'#a5c1ae');tree(748,184);rect(348,398,110,42,'#496365');text('출구',401,425,'#e4ddbe');
 }else if(mode==='trial'){
-rect(0,0,800,440,'#425564');for(let x=20;x<800;x+=160){rect(x,20,22,220,'#8f998d');rect(x-5,20,32,15,'#c0b999');}rect(0,242,800,198,'#8e7b63');rect(372,40,56,56,'#c6ac70');text('§',400,80,'#43515b',37);person(210,180,'#d7dcaf',5);person(605,180,'#967d84',5,true);rect(30,285,310,110,'#5c514b');rect(461,285,310,110,'#5c514b');rect(25,280,320,15,'#b9a179');rect(456,280,320,15,'#b9a179');
+rect(0,0,800,440,'#425564');for(let x=20;x<800;x+=160){rect(x,20,22,220,'#8f998d');rect(x-5,20,32,15,'#c0b999');}rect(0,242,800,198,'#8e7b63');rect(372,40,56,56,'#c6ac70');text('§',400,80,'#43515b',37);person(210,180,'#d7dcaf',5);person(605+(reaction==='shaken'?Math.sin(t*.4)*3:0),180,'#967d84',5,true);if(reaction==='shaken'){rect(641,140+(t%30),5,10,'#acd8e0');}rect(30,285,310,110,'#5c514b');rect(461,285,310,110,'#5c514b');rect(25,280,320,15,'#b9a179');rect(456,280,320,15,'#b9a179');
 }else{
 rect(0,0,800,440,'#293e4d');rect(0,275,800,165,'#687a77');building(65,65,265,210,'#bba688',scenario===4?'시립 도서관':'하루 편의점','#667e69');rect(0,325,800,115,'#526369');for(let x=0;x<800;x+=52)rect(x,374,25,3,'#b1b59b');tree(720,240);person(423,240,'#e5d793',3);if(scenario===0){rect(471,271,61,39,'#b28a60');rect(466,261,72,11,'#c7a379');if(scene>0)rect(483,263,34,14,'#af6153');}if(scenario===1){person(579,241,'#9f7370',3,true);}if(scenario===2){rect(520,279,83,5,'#c3cdaf');rect(585,225,5,60,'#bfc9ae');rect(580,220,20,5,'#bfc9ae');rect(518,285,12,12,'#243a45');rect(582,285,12,12,'#243a45');}if(scenario>=3){rect(492,257,25,39,'#172d3b');text(scenario===4?'00:00':'₩',505,280,'#e0b587',10);}if(scene>0){rect(418,175,27,25,'#eee3be');text('!',431,194,'#9e5645',21);rect(438,200,6,7,'#eee3be');}
 }
-if(mode==='town'||mode==='room'){const p=actor.current,speed=2;let nx=p.x,ny=p.y;if(keys.has('ArrowLeft')||keys.has('a')||directionRef.current==='left')nx-=speed;if(keys.has('ArrowRight')||keys.has('d')||directionRef.current==='right')nx+=speed;if(keys.has('ArrowUp')||keys.has('w')||directionRef.current==='up')ny-=speed;if(keys.has('ArrowDown')||keys.has('s')||directionRef.current==='down')ny+=speed;const blocks=mode==='town'?[[52,45,164,151],[231,77,92,111],[502,27,227,159],[60,331,190,109],[517,335,176,105]]:[[285,160,205,98],[530,220,95,86]];if(nx>15&&nx<785&&ny>(mode==='room'?156:20)&&ny<411&&!blocks.some(([x,y,w,h])=>nx>x-8&&nx<x+w+8&&ny>y-12&&ny<y+h)) {p.x=nx;p.y=ny;}person(p.x,p.y);rect(p.x-16,p.y-35,32,13,'#263e49');text('나',p.x,p.y-25,'#e2e9a0',9);}
-rect(0,0,800,440,'#172c4116');raf=requestAnimationFrame(draw);};draw();return()=>{cancelAnimationFrame(raf);window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);window.removeEventListener('blur',clear);};},[mode,room,scenario,scene]);
-return <canvas ref={canvas} width={800} height={440} className="world-canvas" aria-label={mode==='town'?'하루동 도트 마을 지도':mode==='trial'?'심문 공방 장면':'도트 캐릭터 사건 장면'}/>;
+if(mode==='town'||mode==='room'){
+const p=actor.current,speed=2.6*delta,paused=!!document.querySelector('[role="dialog"]');let nx=p.x,ny=p.y;
+const left=keys.has('ArrowLeft')||keys.has('a')||directionRef.current==='left',right=keys.has('ArrowRight')||keys.has('d')||directionRef.current==='right',upward=keys.has('ArrowUp')||keys.has('w')||directionRef.current==='up',downward=keys.has('ArrowDown')||keys.has('s')||directionRef.current==='down';
+if(paused){keys.clear();path.current=[];}else{
+if(left||right||upward||downward)path.current=[];
+const diagonal=(left||right)&&(upward||downward)?Math.SQRT1_2:1;
+if(left)nx-=speed*diagonal;if(right)nx+=speed*diagonal;if(upward)ny-=speed*diagonal;if(downward)ny+=speed*diagonal;
+const target=path.current[0];if(target){const d=distance(p,target);if(d<=speed){nx=target.x;ny=target.y;path.current.shift();}else{nx+=(target.x-p.x)/d*speed;ny+=(target.y-p.y)/d*speed;}}
+if(walkable({x:nx,y:p.y},mode==='room'))p.x=nx;if(walkable({x:p.x,y:ny},mode==='room'))p.y=ny;
+}
+if(path.current.length){const goal=path.current[path.current.length-1];rect(goal.x-7,goal.y-2,14,3,'#d9ed9b');rect(goal.x-2,goal.y-7,3,14,'#d9ed9b');}
+const targets=mode==='town'?entrances.map(e=>({...e,name:e.room===2?scenarios[scenario].venue:scenarios[scenario].rooms[e.room]})):scenarios[scenario].objects.filter((o,i)=>objectRoom(scenarios[scenario],i)===room);
+const nearest=targets.reduce<typeof targets[number]|undefined>((best,item)=>!best||distance(p,item)<distance(p,best)?item:best,undefined);
+const name=nearest&&distance(p,nearest)<135?nearest.name:'';if(name!==lastNearby){lastNearby=name;nearby.current?.(name);}
+person(p.x,p.y);rect(p.x-16,p.y-35,32,13,'#263e49');text('나',p.x,p.y-25,'#e2e9a0',9);
+if(name){rect(p.x+14,p.y-29,16,16,'#d9ed9b');text('E',p.x+22,p.y-17,'#263e49',10);}
+}
+rect(0,0,800,440,'#172c4116');raf=requestAnimationFrame(draw);};draw();return()=>{cancelAnimationFrame(raf);window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);window.removeEventListener('blur',clear);};},[mode,room,scenario,scene,reaction]);
+return <canvas ref={canvas} width={800} height={440} className="world-canvas" onClick={e=>{if(mode!=='town'&&mode!=='room')return;const b=e.currentTarget.getBoundingClientRect();path.current=findPath(actor.current,{x:(e.clientX-b.left)*800/b.width,y:(e.clientY-b.top)*440/b.height},mode==='room');}} aria-label={mode==='town'?'하루동 도트 마을 지도':mode==='trial'?'심문 공방 장면':'도트 캐릭터 사건 장면'}/>;
 }
